@@ -2,6 +2,7 @@
 
 ## Usage
 
+```bash
 usage: pdns_register.py [-h] [-f INPUT_FILE] [-d DOMAIN] [-n NAME]
                         [-c CONTENT] [-r RECTYPE] [-t TTL]
 
@@ -17,3 +18,4 @@ optional arguments:
   -r RECTYPE, --rectype RECTYPE
                         Record type (A, CNAME, PTR, etc)
   -t TTL, --ttl TTL     TTL
+```
