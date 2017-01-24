@@ -30,7 +30,12 @@ By default, pdns_register looks at /etc/pdns-register.yaml for the PowerDNS serv
 server:
   name: 'chdns1.qa.isrealm.com'
   username: 'powerdns'
-  password: 'yU73nYpcDAZE6MA'
+  password: 'changeme'
   port: 3306
   database: 'powerdns'
-  ```
+```
+
+The YAML file can be specified as a command-line parameter as well if the default path isn't desirable:
+```bash
+$ pdns_register --file /usr/local/etc/pdns.yaml --name test.example.com --content 10.2.3.4 --rectype A --domain example.com
+```
