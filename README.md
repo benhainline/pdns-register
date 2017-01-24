@@ -39,3 +39,9 @@ The YAML file can be specified as a command-line parameter as well if the defaul
 ```bash
 $ pdns_register --file /usr/local/etc/pdns.yaml --name test.example.com --content 10.2.3.4 --rectype A --domain example.com
 ```
+
+## TODO
+* Check to ensure TTL is between 0 and 2147483647 (RFC 2181)
+* Auto-add PTR records for A records registrations
+* Check to see if reverse recrod is already available
+* Add function param to disable auto-adding of PTR records
