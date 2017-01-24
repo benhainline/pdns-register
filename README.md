@@ -22,3 +22,15 @@ optional arguments:
                         Record type (A, CNAME, PTR, etc)
   -t TTL, --ttl TTL     TTL
 ```
+
+## DNS Server Settings
+By default, pdns_register looks at /etc/pdns-register.yaml for the PowerDNS server configuration settings. These include the DNS server name, database username, password, port, and PowerDNS database name. For example:
+```yaml
+---
+server:
+  name: 'chdns1.qa.isrealm.com'
+  username: 'powerdns'
+  password: 'yU73nYpcDAZE6MA'
+  port: 3306
+  database: 'powerdns'
+  ```
