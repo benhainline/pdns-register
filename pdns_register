@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
 import argparse
-import sys
 import MySQLdb
+import re
+import sys
 import yaml
 from collections import defaultdict
 from iptools.ipv4 import validate_ip
@@ -66,11 +67,11 @@ def perform_query(dns_server, db_port, db_user, db_pw, database, query, op_type)
 def get_domain_id(domain, server):
     """Get a domain ID given a domain and a PowerDNS server"""
     domain_id_query = "SELECT * FROM domains WHERE name='%s'" % domain
-    try:
-        domain_id = perform_query(server.name, server.port, server.user, server.password, server.database, domain_id_query, 'query')[0]
-    except IndexError:
-        print 'There are no domains with the name %s in the database.' % domain
-        sys.exit()
+#    try:
+    domain_id = perform_query(server.name, server.port, server.user, server.password, server.database, domain_id_query, 'query')[0]
+#    except IndexError:
+#        print 'There are no domains with the name %s in the database.' % domain
+#        sys.exit()
     return domain_id[0]
 
 def record_name_exist(domain, server, name):
@@ -104,14 +105,22 @@ def find_reverse_domain_id(server, ip):
     """Find a reverse domain id given an ip and server"""
     #rev_domains = get_reverse_domains(server)
     if validate_ip(ip):
-    #in_addr_ip = convert_ip_to_addr(ip)
     # Look for reverse zone in order of most specific to least specifc
+        reverse_zone_list = []
         reverse_ip = ip.split('.')[::-1]
-        print reverse_ip
-        next_reverse_zone = '.'.join(split_ip[::-3]) + '.in-addr.arpa'
-        print next_reverse_zone
+        for i in range(1,4):
+            next_reverse_zone = '.'.join(reverse_ip[i:]) + '.in-addr.arpa'
+            try:
+                reverse_domain_id = get_domain_id(next_reverse_zone, server)
+            except:
+                pass
+    if reverse_domain_id:
+        return reverse_domain_id
+    else:
+        raise Eception('There is no valid reverse domain for this record')
 
 def convert_ip_to_addr(ip):
+    """Convert IP to reverse notation"""
     if validate_ip(ip):
         split_ip = ip.split('.')
         reverse_ip = '.'.join(split_ip[::-1]) + '.in-addr.arpa'
@@ -119,8 +128,14 @@ def convert_ip_to_addr(ip):
     else:
         raise Exception('The IP address is not in dotted-quad format.')
 
+def validate_addr(name):
+    """Validate reverse addr notation"""
+    p = re.compile('^(([0-2][0-5][0-6]|[0-2][0-4][0-9]|[0-1][0-9][0-9]|[0-9][0-9]|[1-9])\.){4}in-addr.arpa$')
+    match = p.match(name)
+    return match
+
 # TODO: Add function param to disable auto-adding of PTR
-def insert_record(domain, server, rec_type, name, content, ttl=None, add_reverse=None):
+def insert_record(domain, server, rec_type, name, content, ttl=None, noptr=None):
     """Insert record into PDNS records database"""
     if ttl is None:
         ttl = 3600
@@ -128,18 +143,27 @@ def insert_record(domain, server, rec_type, name, content, ttl=None, add_reverse
     # Check to see if record exists
     if record_name_exist(domain, server, name):
         raise Exception('This record already exists')
-    # Validate dotted-quad ip address
+    # Validate entries
     elif rec_type == 'A' and not validate_ip(content):
         raise Exception('The IP address used as content is not in dotted-quad format.')
+    elif rec_type == 'PTR' and not validate_addr(name):
+        raise Exception('The PTR record is not in proper reverse addr notation.')
+    elif rec_type == 'CNAME' and validate_ip(content):
+        raise Exception('A CNAME cannot refer to an IP address.')
     else:
         insert_query = "INSERT INTO records (domain_id,name,type,content,ttl) VALUES ({0},'{1}','{2}','{3}',{4})".format(record_domain_id, name, rec_type, content, ttl)
         perform_query(server.name, server.port, server.user, server.password, server.database, insert_query, 'insert')
-        print "DNS Registration successful."
     # TODO: insert reverse record (need a way to find reverse domain), also add error-checking to make sure reverse record is not already present
     # Add reverse record
-    #if add_reverse:
-    #    if rec_type == 'A':
-
+    if not noptr:
+        if rec_type == 'A':
+            reverse_record = convert_ip_to_addr(content)
+            rev_domain_id = find_reverse_domain_id(server, content)
+            insert_query = "INSERT INTO records (domain_id,name,type,content,ttl) VALUES ({0},'{1}','{2}','{3}',{4})".format(rev_domain_id, reverse_record, 'PTR', name, ttl)
+            perform_query(server.name, server.port, server.user, server.password, server.database, insert_query, 'insert')
+        else:
+            raise Exception('Can only add a reverse entry for an A record.')
+    print "DNS Registration successful."
 
 def main():
     """Get command-line inputs"""
@@ -148,8 +172,10 @@ def main():
     parser.add_argument('-d', '--domain', help='Domain of record', dest='domain')
     parser.add_argument('-n', '--name', help='Record name', dest='name')
     parser.add_argument('-c', '--content', help='Content of record', dest='content')
-    parser.add_argument('-r', '--rectype', help='Record type (A, CNAME, PTR, etc)', dest='rectype')
+    parser.add_argument('-r', '--rec-type', help='Record type', choices=['A','PTR','CNAME'], dest='rectype')
+    parser.add_argument('-x', '--delete', help='Delete record', dest='delete')
     parser.add_argument('-t', '--ttl', help='TTL', dest='ttl', default=3600)
+    parser.add_argument('-p', '--no-ptr', help='Do not add a corresponding PTR record when adding an A record', action="store_true", default=False, dest='noptr')
     args = parser.parse_args()
 
     # Check for command-line input
@@ -197,8 +223,12 @@ def main():
             ttl = raw_input('Please enter the ttl of the record you are inserting: ')
         except KeyboardInterrupt:
             sys.exit()
+    if args.noptr:
+        noptr = args.noptr
+    else:
+        noptr = False
 
-    insert_record(domain, server_obj, rectype, name, content, ttl)
+    insert_record(domain, server_obj, rectype, name, content, ttl, noptr)
 
 if __name__ == '__main__':
     main()
