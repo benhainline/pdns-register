@@ -6,8 +6,8 @@ pdns_registration is a Python script that interacts with PowerDNS's MySQL backen
 ## CLI Usage
 
 ```bash
-usage: pdns_register.py [-h] [-f INPUT_FILE] [-d DOMAIN] [-n NAME]
-                        [-c CONTENT] [-r RECTYPE] [-t TTL]
+usage: pdns_register [-h] [-f INPUT_FILE] [-d DOMAIN] [-n NAME] [-c CONTENT]
+                     [-r {A,PTR,CNAME}] [-x DELETE] [-t TTL] [-p]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -18,9 +18,13 @@ optional arguments:
   -n NAME, --name NAME  Record name
   -c CONTENT, --content CONTENT
                         Content of record
-  -r RECTYPE, --rectype RECTYPE
-                        Record type (A, CNAME, PTR, etc)
+  -r {A,PTR,CNAME}, --rec-type {A,PTR,CNAME}
+                        Record type
+  -x DELETE, --delete DELETE
+                        Delete record
   -t TTL, --ttl TTL     TTL
+  -p, --no-ptr          Do not add a corresponding PTR record when adding an A
+                        record
 ```
 
 ## DNS Server Settings
