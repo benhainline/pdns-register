@@ -41,6 +41,7 @@ $ pdns_register --file /usr/local/etc/pdns.yaml --name test.example.com --conten
 ```
 
 ## TODO
+* Python 3 compatibility
 * Check to ensure TTL is between 0 and 2147483647 (RFC 2181)
 * Auto-add PTR records for A records registrations
 * Check to see if reverse recrod is already available
