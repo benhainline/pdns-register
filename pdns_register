@@ -30,14 +30,14 @@ def get_server_yaml(yaml_file=None):
             print 'Could not open configuration file. Permission denied.'
         else:
             print 'There was an issue opening the configuration file.'
-        sys.exit()
+        sys.exit(100)
     data = yaml.safe_load(f)
     f.close()
     try:
         server_info = DnsServer(data['server']['name'],data['server']['port'],data['server']['username'],data['server']['password'],data['server']['database'])
     except NameError:
         print 'Error loading attributes in %s.' % yaml_file
-        sys.exit()
+        sys.exit(101)
     return server_info
 
 def perform_query(dns_server, db_port, db_user, db_pw, database, query, op_type):
@@ -67,17 +67,12 @@ def perform_query(dns_server, db_port, db_user, db_pw, database, query, op_type)
 def get_domain_id(domain, server):
     """Get a domain ID given a domain and a PowerDNS server"""
     domain_id_query = "SELECT * FROM domains WHERE name='%s'" % domain
-#    try:
     domain_id = perform_query(server.name, server.port, server.user, server.password, server.database, domain_id_query, 'query')[0]
-#    except IndexError:
-#        print 'There are no domains with the name %s in the database.' % domain
-#        sys.exit()
     return domain_id[0]
 
-def record_name_exist(domain, server, name):
+def record_name_exist(domain_id, server, name):
     """Check existance of a record name"""
-    this_domain_id = get_domain_id(domain, server)
-    record_name_query = "SELECT * FROM records where domain_id={0} and name='{1}'".format(this_domain_id, name)
+    record_name_query = "SELECT * FROM records where domain_id={0} and name='{1}'".format(domain_id, name)
     record_name = perform_query(server.name, server.port, server.user, server.password, server.database, record_name_query, 'query')
     if any(record_name):
         return True
@@ -103,7 +98,6 @@ def get_reverse_domains(server):
 
 def find_reverse_domain_id(server, ip):
     """Find a reverse domain id given an ip and server"""
-    #rev_domains = get_reverse_domains(server)
     if validate_ip(ip):
     # Look for reverse zone in order of most specific to least specifc
         reverse_zone_list = []
@@ -134,14 +128,17 @@ def validate_addr(name):
     match = p.match(name)
     return match
 
-# TODO: Add function param to disable auto-adding of PTR
 def insert_record(domain, server, rec_type, name, content, ttl=None, noptr=None):
     """Insert record into PDNS records database"""
     if ttl is None:
         ttl = 3600
-    record_domain_id = get_domain_id(domain, server)
+    try:
+        record_domain_id = get_domain_id(domain, server)
+    except IndexError:
+        print "%s is not a domain." % domain
+        sys.exit(99)
     # Check to see if record exists
-    if record_name_exist(domain, server, name):
+    if record_name_exist(record_domain_id, server, name):
         raise Exception('This record already exists')
     # Validate entries
     elif rec_type == 'A' and not validate_ip(content):
@@ -153,14 +150,17 @@ def insert_record(domain, server, rec_type, name, content, ttl=None, noptr=None)
     else:
         insert_query = "INSERT INTO records (domain_id,name,type,content,ttl) VALUES ({0},'{1}','{2}','{3}',{4})".format(record_domain_id, name, rec_type, content, ttl)
         perform_query(server.name, server.port, server.user, server.password, server.database, insert_query, 'insert')
-    # TODO: insert reverse record (need a way to find reverse domain), also add error-checking to make sure reverse record is not already present
     # Add reverse record
     if not noptr:
         if rec_type == 'A':
             reverse_record = convert_ip_to_addr(content)
             rev_domain_id = find_reverse_domain_id(server, content)
-            insert_query = "INSERT INTO records (domain_id,name,type,content,ttl) VALUES ({0},'{1}','{2}','{3}',{4})".format(rev_domain_id, reverse_record, 'PTR', name, ttl)
-            perform_query(server.name, server.port, server.user, server.password, server.database, insert_query, 'insert')
+            # Check to see if PTR already exists
+            if record_name_exist(rev_domain_id, server, reverse_record):
+                raise Exception('A PTR entry already exists for %s' % name)
+            else:
+                insert_query = "INSERT INTO records (domain_id,name,type,content,ttl) VALUES ({0},'{1}','{2}','{3}',{4})".format(rev_domain_id, reverse_record, 'PTR', name, ttl)
+                perform_query(server.name, server.port, server.user, server.password, server.database, insert_query, 'insert')
         else:
             raise Exception('Can only add a reverse entry for an A record.')
     print "DNS Registration successful."
@@ -185,7 +185,7 @@ def main():
         try:
             input_file = raw_input('Please enter the path to the YAML file containing DNS server data: ')
         except KeyboardInterrupt:
-            sys.exit()
+            sys.exit(1)
     server_obj = get_server_yaml(input_file)
     if args.domain:
         domain = args.domain
@@ -193,28 +193,28 @@ def main():
         try:
             domain = raw_input('Please enter the domain of the record you are inserting: ')
         except KeyboardInterrupt:
-            sys.exit()
+            sys.exit(1)
     if args.name:
         name = args.name
     else:
         try:
             name = raw_input('Please enter the name of the record you are inserting: ')
         except KeyboardInterrupt:
-            sys.exit()
+            sys.exit(1)
     if args.content:
         content = args.content
     else:
         try:
             content = raw_input('Please enter the content of the record you are inserting: ')
         except KeyboardInterrupt:
-            sys.exit()
+            sys.exit(1)
     if args.rectype:
         rectype = args.rectype
     else:
         try:
             rectype = raw_input('Please enter the record type you are inserting (A, CNAME, PTR): ')
         except KeyboardInterrupt:
-            sys.exit()
+            sys.exit(1)
     if args.ttl:
         # TODO: check to ensure TTL is between 0 and 2147483647 (RFC 2181)
         ttl = args.ttl
@@ -222,7 +222,7 @@ def main():
         try:
             ttl = raw_input('Please enter the ttl of the record you are inserting: ')
         except KeyboardInterrupt:
-            sys.exit()
+            sys.exit(1)
     if args.noptr:
         noptr = args.noptr
     else:
