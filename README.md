@@ -48,4 +48,3 @@ $ pdns_register --file /usr/local/etc/pdns.yaml --name test.example.com --conten
 * Python 3 compatibility
 * Add code to delete a record
 * Check to ensure TTL is between 0 and 2147483647 (RFC 2181)
-* Check to see if reverse record is already available
