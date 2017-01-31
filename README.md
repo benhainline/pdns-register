@@ -1,4 +1,4 @@
-pdns_register
+pdns-register
 =============
 
 ## Overview
