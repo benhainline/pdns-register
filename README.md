@@ -33,7 +33,7 @@ By default, pdns_register looks at /etc/pdns-register.yaml for the PowerDNS serv
 ```yaml
 ---
 server:
-  name: 'chdns1.qa.isrealm.com'
+  name: 'mypdns.example.com'
   username: 'powerdns'
   password: 'changeme'
   port: 3306
