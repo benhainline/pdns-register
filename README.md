@@ -2,7 +2,7 @@ pdns-register
 =============
 
 ## Overview
-pdns-registration is a Python script that interacts with PowerDNS's MySQL backend to add and delete DNS records.
+pdns-registration is a Python script that interacts with the PowerDNS MySQL backend to add and delete DNS records.
 
 ## CLI Usage
 
