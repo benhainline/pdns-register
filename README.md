@@ -1,4 +1,5 @@
-# pdns_register
+pdns_register
+=============
 
 ## Overview
 pdns_registration is a Python script that interacts with PowerDNS's MySQL backend to add and delete DNS records.
@@ -43,8 +44,3 @@ The YAML file can be specified as a command-line parameter as well if the defaul
 ```bash
 $ pdns_register --file /usr/local/etc/pdns.yaml --name test.example.com --content 10.2.3.4 --rectype A --domain example.com
 ```
-
-## TODO
-* Python 3 compatibility
-* Add code to delete a record
-* Check to ensure TTL is between 0 and 2147483647 (RFC 2181)
