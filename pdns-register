@@ -50,19 +50,22 @@ def perform_query(dns_server, db_port, db_user, db_pw, database, query, op_type)
             return_data = cursor.fetchall()
             db_conn.close()
             return return_data
-        if op_type == 'insert':
+        elif op_type == 'insert' or op_type == 'delete':
             try:
                 cursor.execute(query)
                 db_conn.commit()
             except:
                 db_conn.rollback()
+        else:
+            raise Exception('perform_query takes in query, insert, or delete as op_type.')
+            sys.exit(102)
     except MySQLdb.Error as e:
         if e[0] == 1045:
             print 'Access denied access the MySQL database on %s. Exiting...' % dns_server
-            sys.exit(5)
+            sys.exit(103)
         else:
             print 'Database does not exist.'
-            sys.exit(6)
+            sys.exit(104)
 
 def get_domain_id(domain, server):
     """Get a domain ID given a domain and a PowerDNS server"""
@@ -75,6 +78,17 @@ def record_name_exist(domain_id, server, name):
     record_name_query = "SELECT * FROM records where domain_id={0} and name='{1}'".format(domain_id, name)
     record_name = perform_query(server.name, server.port, server.user, server.password, server.database, record_name_query, 'query')
     if any(record_name):
+        return True
+    else:
+        return False
+
+def check_duplicate_records(domain, server, name):
+    """Check for duplicates of a record in a domain.
+    Return true if duplicates are found."""
+    this_domain_id = get_domain_id(domain, server)
+    records = "SELECT * FROM records where domain_id={0} and name='{1}'".format(this_domain_id, name)
+    records_found = perform_query(server.name, server.port, server.user, server.password, server.database, records, 'query')
+    if len(records_found) > 1:
         return True
     else:
         return False
@@ -111,7 +125,7 @@ def find_reverse_domain_id(server, ip):
     if reverse_domain_id:
         return reverse_domain_id
     else:
-        raise Eception('There is no valid reverse domain for this record')
+        raise Exception('There is no valid reverse domain for this record')
 
 def convert_ip_to_addr(ip):
     """Convert IP to reverse notation"""
@@ -127,6 +141,32 @@ def validate_addr(name):
     p = re.compile('^(([0-2][0-5][0-6]|[0-2][0-4][0-9]|[0-1][0-9][0-9]|[0-9][0-9]|[1-9])\.){4}in-addr.arpa$')
     match = p.match(name)
     return match
+
+def delete_record(domain, server, rec_type, name, content):
+    """Delete a record from the PDNS records database"""
+    this_domain_id = get_domain_id(domain, server)
+    if check_duplicate_records(domain, server, name):
+        raise Exception('There is more than one record associated with this name. Multiple records cannot be deleted.')
+    elif record_name_exist(this_domain_id, server, name):
+        delete_record = "DELETE FROM records WHERE domain_id={0} AND name='{1}' and type='{2}'".format(this_domain_id, name, rec_type)
+        delete_record = perform_query(server.name, server.port, server.user, server.password, server.database, delete_record, 'delete')
+        print 'DNS record {0} has been deleted.'.format(name)
+        if rec_type == 'A':
+            # Try to delete PTR record
+            reverse_record = convert_ip_to_addr(content)
+            rev_domain_id = find_reverse_domain_id(server, content)
+            # Check to see if PTR already exists
+            if record_name_exist(rev_domain_id, server, reverse_record):
+                # Check to see if PTR record maps to our A record
+                get_reverse_record = "SELECT * FROM records WHERE domain_id={0} AND name='{1}' AND type='PTR' AND content='{2}'".format(rev_domain_id, reverse_record, name)
+                if perform_query(server.name, server.port, server.user, server.password, server.database, get_reverse_record, 'query'):
+                    print('Found PTR record for {0}. Deleting {1}.'.format(name, reverse_record))
+                    delete_ptr_record = "DELETE FROM records WHERE domain_id={0} AND name='{1}' AND type='PTR'".format(rev_domain_id, reverse_record)
+                    perform_query(server.name, server.port, server.user, server.password, server.database, delete_ptr_record, 'delete')
+                    print 'DNS record {0} has been deleted.'.format(reverse_record)
+    else:
+        print('DNS record {0} does not exist in domain {1}.'.format(name, domain))
+        sys.exit(105)
 
 def insert_record(domain, server, rec_type, name, content, ttl=None, noptr=None):
     """Insert record into PDNS records database"""
@@ -173,7 +213,7 @@ def main():
     parser.add_argument('-n', '--name', help='Record name', dest='name')
     parser.add_argument('-c', '--content', help='Content of record', dest='content')
     parser.add_argument('-r', '--rec-type', help='Record type', choices=['A','PTR','CNAME'], dest='rectype')
-    parser.add_argument('-x', '--delete', help='Delete record', dest='delete')
+    parser.add_argument('-x', '--delete', help='Delete record', action="store_true", default=False, dest='delete')
     parser.add_argument('-t', '--ttl', help='TTL', dest='ttl', default=3600)
     parser.add_argument('-p', '--no-ptr', help='Do not add a corresponding PTR record when adding an A record', action="store_true", default=False, dest='noptr')
     args = parser.parse_args()
@@ -227,8 +267,10 @@ def main():
         noptr = args.noptr
     else:
         noptr = False
-
-    insert_record(domain, server_obj, rectype, name, content, ttl, noptr)
+    if args.delete:
+        delete_record(domain, server_obj, rectype, name, content)
+    else:
+        insert_record(domain, server_obj, rectype, name, content, ttl, noptr)
 
 if __name__ == '__main__':
     main()
